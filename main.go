@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nonlawliet/book-management-test/controller"
+	"github.com/nonlawliet/book-management-test/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -27,13 +29,12 @@ const (
 // #2 - Config logger
 // #3 - Connect PostgreSQL database
 // #4 - Migrate struct
+// #5 - Add db instance to handler struct instead
 
 // # Add middleware : login & check permission
-// #5 - Init app gin framework
+// #6 - Init app gin framework
 
 // # Business logic : Book management (CRUD + List)
-
-var db *gorm.DB
 
 func main() {
 	// #1 - Config connection string
@@ -50,8 +51,7 @@ func main() {
 	)
 
 	// #3 - Connect PostgreSQL database
-	var err error
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: newLogger,
 	})
 	if err != nil {
@@ -59,9 +59,12 @@ func main() {
 	}
 
 	// #4 - Migrate struct
-	db.AutoMigrate(&Book{}, &User{})
+	db.AutoMigrate(&models.Book{}, &models.User{})
 
-	// #5 - Init app gin framework
+	// #5 - Add db instance to handler struct instead
+	handler := controller.NewHandler(db)
+
+	// #6 - Init app gin framework
 	app := gin.New()
 
 	// test api
@@ -71,175 +74,15 @@ func main() {
 		})
 	})
 
-	// #6 - Add login middleware
+	// #7 - Add login middleware
 
-	// #7 - Add handler function
-	app.GET("/books/detail", detailBookHandler)
-	app.GET("/books/list", listBooksHandler)
-	app.POST("/books/create", createBookHandler)
-	app.PUT("/books/update", updateBookHandler)
-	app.DELETE("/books/delete", deleteBookHandler)
+	// #8 - Add handler function
+	app.GET("/books/detail", handler.DetailBookHandler)
+	app.GET("/books/list", handler.ListBooksHandler)
+	app.POST("/books/create", handler.CreateBookHandler)
+	app.PUT("/books/update", handler.UpdateBookHandler)
+	app.DELETE("/books/delete", handler.DeleteBookHandler)
 
-	// #8 - Run gin engine
+	// #9 - Run gin engine
 	app.Run()
-}
-
-func detailBookHandler(c *gin.Context) {
-	// #1 - Create book instance
-	var book Book
-
-	// #2 - Bind request into book instance
-	if err := c.ShouldBindJSON(&book); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	// #3 - Validate
-	if book.ID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please verify book id",
-		})
-		return
-	}
-
-	// #4 - Query data
-	if result := db.First(&book, book.ID); result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": result.Error.Error(),
-		})
-		return
-	}
-
-	// #5 - Make response
-	c.JSON(http.StatusOK, &book)
-}
-func listBooksHandler(c *gin.Context) {
-	// #1 - Create books instance (as a slice)
-	var books []Book
-
-	// #2 - Query data
-	if result := db.Find(&books); result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": result.Error.Error(),
-		})
-		return
-	}
-
-	// #3 - Make response
-	c.JSON(http.StatusOK, &books)
-}
-func createBookHandler(c *gin.Context) {
-	// #1 - Create book instance
-	var book Book
-
-	// #2 - Bind request into book instance
-	if err := c.ShouldBindJSON(&book); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	// #3 - Validate
-	if book.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please fill book name",
-		})
-		return
-	}
-	if book.Author == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please fill book author",
-		})
-		return
-	}
-
-	// #4 - Create data
-	if result := db.Create(&book); result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": result.Error.Error(),
-		})
-		return
-	}
-
-	// #5 - Make response
-	c.JSON(http.StatusOK, &book)
-}
-func updateBookHandler(c *gin.Context) {
-	// #1 - Create book instance
-	var book Book
-
-	// #2 - Bind request into book instance
-	if err := c.ShouldBindJSON(&book); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	// #3 - Validate
-	if book.ID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please verify book id",
-		})
-		return
-	}
-	if book.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please fill book name",
-		})
-		return
-	}
-	if book.Author == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please fill book author",
-		})
-		return
-	}
-
-	// #4 - Updates data
-	if result := db.Updates(&book); result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": result.Error.Error(),
-		})
-		return
-	}
-
-	// #5 - Make response
-	c.JSON(http.StatusOK, &book)
-}
-func deleteBookHandler(c *gin.Context) {
-	// #1 - Create book instance
-	var book Book
-
-	// #2 - Bind request into book instance
-	if err := c.ShouldBindJSON(&book); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	// #3 - Validate
-	if book.ID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request - please verify book id",
-		})
-		return
-	}
-
-	// #4 - Delete book
-	if result := db.Delete(&book, book.ID); result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": result.Error.Error(),
-		})
-		return
-	}
-
-	// #5 - Make response
-	c.JSON(http.StatusOK, gin.H{
-		"message": "delete book successful",
-	})
 }
