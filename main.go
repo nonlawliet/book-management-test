@@ -5,9 +5,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/nonlawliet/book-management-test/controller"
 	"github.com/nonlawliet/book-management-test/models"
 	"gorm.io/driver/postgres"
@@ -33,8 +35,9 @@ const (
 
 // # Add middleware : login & check permission
 // #6 - Init app gin framework
-
-// # Business logic : Book management (CRUD + List)
+// #7 - Add login middleware
+// #8 - Add handler function
+// #9 - Run gin engine
 
 func main() {
 	// #1 - Config connection string
@@ -75,14 +78,53 @@ func main() {
 	})
 
 	// #7 - Add login middleware
+	protected := app.Group("/", AuthRequired)
 
 	// #8 - Add handler function
-	app.GET("/books/detail", handler.DetailBookHandler)
-	app.GET("/books/list", handler.ListBooksHandler)
-	app.POST("/books/create", handler.CreateBookHandler)
-	app.PUT("/books/update", handler.UpdateBookHandler)
-	app.DELETE("/books/delete", handler.DeleteBookHandler)
+	app.POST("/register", handler.RegisterUser)
+	app.POST("/login", handler.LoginHandler)
+
+	protected.GET("/books/detail", handler.DetailBookHandler)
+	protected.GET("/books/list", handler.ListBooksHandler)
+	protected.POST("/books/create", handler.CreateBookHandler)
+	protected.PUT("/books/update", handler.UpdateBookHandler)
+	protected.DELETE("/books/delete", handler.DeleteBookHandler)
 
 	// #9 - Run gin engine
 	app.Run()
+}
+
+func AuthRequired(c *gin.Context) {
+	// secretKey data
+	var secretKey = []byte("secret-key") // should be in env file, or un-publish place
+
+	// Check request info
+	fmt.Printf("URL = %s, Method = %s, Time = %s\n", c.Request.URL, c.Request.Method, time.Now())
+
+	// #1 - Get token from header
+	s := c.Request.Header.Get("Authorization")
+	tokenHeader := strings.TrimPrefix(s, "Bearer ")
+
+	// #2 - Get token data
+	token, err := jwt.ParseWithClaims(tokenHeader, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return secretKey, nil
+	})
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid token or expired",
+		})
+		c.Abort()
+		return
+	}
+
+	// #3 - Check role
+	if token.Claims.(jwt.MapClaims)["role"] != "admin" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "invalid role",
+		})
+		c.Abort()
+		return
+	}
+
+	c.Next()
 }
